@@ -1,0 +1,69 @@
+from pydriller import Repository
+from collections import defaultdict
+import re
+
+# Path to the Git repository you want to analyze
+repo_path = 'https://github.com/elastic/elasticsearch'
+
+# Data structures to store the required information
+file_revision_count = defaultdict(int)
+file_loc_changes = defaultdict(lambda: {'added': 0, 'deleted': 0})
+performance_bug_count = 0
+non_performance_bug_count = 0
+file_bug_revision_count = defaultdict(int)
+
+# Keywords to identify performance and non-performance bug fixes
+performance_bug_keywords = ['deadlock', 'contention', 'infinite loop','memory leak','performance','high memory','stuck','hang','slow', 'speed up','100% CPU']
+bug_fix_keywords = ['fix', 'bug', 'issue', 'error', 'problem']
+
+# Iterate through the commits
+for commit in Repository(repo_path).traverse_commits():
+    print(f"Commit hash: {commit.hash}")
+    print(f"Author: {commit.author.name}")
+    print(f"Date: {commit.author_date}")
+    print(f"Message: {commit.msg}")
+    print(f"Lines added: {commit.insertions}")
+    print(f"Lines deleted: {commit.deletions}")
+    print(f"Files changed: {len(commit.modified_files)}")
+    print("----")
+    
+    # Check if the commit message contains performance or bug-related keywords
+    is_performance_bug = any(keyword in commit.msg.lower() for keyword in performance_bug_keywords)
+    is_bug_fix = any(keyword in commit.msg.lower() for keyword in bug_fix_keywords)
+    
+    # Increment the counters for bug types
+    if is_performance_bug:
+        performance_bug_count += 1
+    elif is_bug_fix:
+        non_performance_bug_count += 1
+
+    # Iterate through the files modified in the commit
+    for file in commit.modified_files:
+        # Increment the revision count for the file
+        file_revision_count[file.filename] += 1
+        
+        # Update the lines of code (LOC) added and deleted for the file
+        file_loc_changes[file.filename]['added'] += file.added_lines
+        file_loc_changes[file.filename]['deleted'] += file.deleted_lines
+        
+        # Increment bug-related revisions if this commit is a bug fix
+        if is_bug_fix:
+            file_bug_revision_count[file.filename] += 1
+
+# Print the aggregated results
+print("\n--- Aggregated Results ---\n")
+print("Number of Revisions (Commits) for Each File:")
+for file, count in file_revision_count.items():
+    print(f"{file}: {count}")
+
+print("\nLines of Code Added and Deleted in File History:")
+for file, changes in file_loc_changes.items():
+    print(f"{file}: Added {changes['added']} lines, Deleted {changes['deleted']} lines")
+
+print("\nBug Fix Counts:")
+print(f"Performance Bug Fixes: {performance_bug_count}")
+print(f"Non-Performance Bug Fixes: {non_performance_bug_count}")
+
+print("\nNumber of Revisions a File Was Involved in Fixing Bugs:")
+for file, count in file_bug_revision_count.items():
+    print(f"{file}: {count} revisions")
